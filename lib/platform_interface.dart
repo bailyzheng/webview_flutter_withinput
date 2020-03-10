@@ -28,6 +28,9 @@ abstract class WebViewPlatformCallbacksHandler {
 
   /// Invoked by [WebViewPlatformController] when a page has finished loading.
   void onPageFinished(String url);
+
+  /// add by stones
+  Future<String> onCustomCommand(dynamic arguments);
 }
 
 /// Interface for talking to the webview's platform implementation.
@@ -166,6 +169,12 @@ abstract class WebViewPlatformController {
   Future<String> getTitle() {
     throw UnimplementedError(
         "WebView getTitle is not implemented on the current platform");
+  }
+
+  //add by stones
+  Future<String> customCommandToWebview(String para) {
+    throw UnimplementedError(
+        "WebView customCommandToWebview is not implemented on the current platform");
   }
 }
 

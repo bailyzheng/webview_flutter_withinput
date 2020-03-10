@@ -16,11 +16,16 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.View
 import android.webkit.*
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.platform.PlatformView
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 
 class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal constructor(
         context: Context,
@@ -91,6 +96,7 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
             "removeJavascriptChannels" -> removeJavaScriptChannels(methodCall, result)
             "clearCache" -> clearCache(result)
             "getTitle" -> getTitle(result)
+            "customCommandToWebview" -> customCommandToWebview(methodCall, result)
             else -> result.notImplemented()
         }
     }
@@ -173,6 +179,24 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
 
     private fun getTitle(result: MethodChannel.Result) {
         result.success(webView.title)
+    }
+    
+    private fun customCommandToWebview(methodCall: MethodCall, result: MethodChannel.Result) {
+        val files = mutableListOf<String>()
+        val jsonObj = JSONObject(methodCall.arguments.toString())
+        if (jsonObj.get("method").toString() == "pick_file") {
+            val arrayObj = jsonObj.getJSONArray("result")
+            for (i in 0 until arrayObj.length()) {
+                files.add(arrayObj[i].toString())
+            }
+            Log.v(TAG, "files is $files")
+        }
+        fileCallback?.onReceiveValue(
+            files.map {
+                FileProvider.getUriForFile(context!!, "${context!!.packageName}.fileProvider", File(it))
+            }.toTypedArray()
+        )
+        result.success("SUCCESS")
     }
 
     private fun applySettings(settings: Map<String, Any>?) {
@@ -276,7 +300,9 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
                         if (item.contains("image") && fileChooserParams.mode == FileChooserParams.MODE_OPEN) {
                             Log.v(TAG, "enter image single")
                             handled = true
-                            startChooseImage()
+//                            startChooseImage()
+                            methodChannel.invokeMethod("onCustomCommand","{\"method\": \"pick_file\", \"acceptTypes\": \"${fileChooserParams.acceptTypes}\"}")
+//                            methodChannel.invokeMethod("onCustomCommand", "hello flutter")
                             break
 //                        } else if (item.contains("image") && fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
 //                            Log.v(TAG, "enter image multi")
@@ -305,7 +331,7 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
             pickIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
 //        context.startActivityForResult(pickIntent, 0)
-        ChooseFileIns.startChoose(pickIntent, 0, object : BiConsumer<Int, Intent?> {
+        ChooseFileIns.startChoose(pickIntent, ChooseFileIns.REQUEST_CODE, object : BiConsumer<Int, Intent?> {
             override fun accept(resultCode: Int, data: Intent?) {
                 Log.v(TAG, "enter accept")
                 if (resultCode == Activity.RESULT_OK) {

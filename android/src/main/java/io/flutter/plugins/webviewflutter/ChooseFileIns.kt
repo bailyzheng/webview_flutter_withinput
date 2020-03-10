@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 
 object ChooseFileIns {
+    const val REQUEST_CODE = 6001
     val TAG = ChooseFileIns::class.java.simpleName
     var activity: Activity? = null
 
