@@ -24,6 +24,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.platform.PlatformView
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 
@@ -185,18 +186,33 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
         val files = mutableListOf<String>()
         val jsonObj = JSONObject(methodCall.arguments.toString())
         if (jsonObj.get("method").toString() == "pick_file") {
-            val arrayObj = jsonObj.getJSONArray("result")
-            for (i in 0 until arrayObj.length()) {
-                files.add(arrayObj[i].toString())
+            try {
+                val arrayObj: JSONArray? = jsonObj.getJSONArray("result")
+                if (arrayObj != null) {
+                    for (i in 0 until arrayObj!!.length()) {
+                        files.add(arrayObj[i]!!.toString())
+                    }
+                    Log.v(TAG, "files is $files")
+                }
+            } catch (e: JSONException) {
+                e.printStackTrace()
             }
-            Log.v(TAG, "files is $files")
+
+            if (files.isNotEmpty()) {
+                fileCallback?.onReceiveValue(
+                        files.map {
+                            FileProvider.getUriForFile(context!!, "${context!!.packageName}.fileProvider", File(it))
+                        }.toTypedArray()
+                )
+            } else {
+                fileCallback?.onReceiveValue(null)
+            }
+            result.success("SUCCESS")
+        } else if (jsonObj.get("method").toString() == "font_response") {
+            val res = jsonObj.get("result").toString()
+            webView.loadUrl("javascript:onFontQueryResult('$res')")
+            result.success("SUCCESS")
         }
-        fileCallback?.onReceiveValue(
-            files.map {
-                FileProvider.getUriForFile(context!!, "${context!!.packageName}.fileProvider", File(it))
-            }.toTypedArray()
-        )
-        result.success("SUCCESS")
     }
 
     private fun applySettings(settings: Map<String, Any>?) {
@@ -265,13 +281,6 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
 
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
-//                if (newProgress == 100) {
-//                    Log.v(TAG, "load complete")
-//                    mProgressBar!!.visibility = View.GONE
-//                } else {
-//                    mProgressBar!!.visibility = View.VISIBLE
-//                    mProgressBar!!.progress = newProgress
-//                }
             }
 
 //            override fun getVideoLoadingProgressView(): View {
@@ -280,13 +289,13 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
 //                return frameLayout
 //            }
 
-            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+//            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
 //                showCustomView(view, callback)
-            }
+//            }
 
-            override fun onHideCustomView() {
+//            override fun onHideCustomView() {
 //                hideCustomView()
-            }
+//            }
 
             override fun onShowFileChooser(webView: WebView?, filePathCallback: ValueCallback<Array<Uri>>?, fileChooserParams: FileChooserParams?): Boolean {
                 Log.v(TAG, "onShowFileChooser")
@@ -294,23 +303,15 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
                 var handled = false
                 if (fileChooserParams?.acceptTypes != null) {
                     Log.v(TAG, "accept type is not null")
-                    for (item in fileChooserParams.acceptTypes) {
-                        Log.v(TAG, "item is $item")
-                        Log.v(TAG, "mode is ${fileChooserParams.mode}")
-                        if (item.contains("image") && fileChooserParams.mode == FileChooserParams.MODE_OPEN) {
-                            Log.v(TAG, "enter image single")
-                            handled = true
-//                            startChooseImage()
-                            methodChannel.invokeMethod("onCustomCommand","{\"method\": \"pick_file\", \"acceptTypes\": \"${fileChooserParams.acceptTypes}\"}")
-//                            methodChannel.invokeMethod("onCustomCommand", "hello flutter")
-                            break
-//                        } else if (item.contains("image") && fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE) {
-//                            Log.v(TAG, "enter image multi")
-//                            handled = true
-//                            fileCallback?.onReceiveValue(loadImages(50)?.toTypedArray())
-//                            break
-                        }
+                    handled = true
+                    val jsonObject = JSONObject()
+                    jsonObject.put("method", "pick_file")
+                    val jsonArray = JSONArray()
+                    for (i in 0 until fileChooserParams.acceptTypes.size) {
+                        jsonArray.put(fileChooserParams.acceptTypes[i])
                     }
+                    jsonObject.put("acceptTypes", jsonArray)
+                    methodChannel.invokeMethod("onCustomCommand", jsonObject.toString())
                 }
                 if (!handled) {
                     fileCallback?.onReceiveValue(null)
@@ -375,12 +376,30 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
         webView = InputAwareWebView(context, containerView)
         displayListenerProxy.onPostWebViewInitialization(displayManager)
         platformThreadHandler = Handler(context.mainLooper)
+        
+        webView.settings.useWideViewPort = true //将图片调整到适合webview的大小
+        webView.settings.loadWithOverviewMode = true // 缩放至屏幕的大小
+        webView.settings.setSupportZoom(true)
+
+        // 便页面支持缩放
+        webView.settings.javaScriptEnabled = true //支持js
+        webView.settings.setSupportZoom(true) //支持缩放
         // Allow local storage.
         webView.settings.domStorageEnabled = true
+        webView.settings.setSupportMultipleWindows(true)// 新加
+        
         webView.settings.javaScriptCanOpenWindowsAutomatically = true
+        webView.settings.allowContentAccess = true
+        webView.settings.allowFileAccess = true
+        webView.settings.allowFileAccessFromFileURLs = true
+        webView.settings.allowUniversalAccessFromFileURLs = true
+        webView.settings.setAppCacheEnabled(true)
+        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
+        
         setChromeClient(webView)
         methodChannel = MethodChannel(messenger, "plugins.flutter.io/webview_$id")
         methodChannel.setMethodCallHandler(this)
