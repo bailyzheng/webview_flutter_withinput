@@ -208,9 +208,10 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
                 fileCallback?.onReceiveValue(null)
             }
             result.success("SUCCESS")
-        } else if (jsonObj.get("method").toString() == "font_response") {
-            val res = jsonObj.get("result").toString()
-            webView.loadUrl("javascript:onFontQueryResult('$res')")
+        } else if (jsonObj.get("method").toString() == "qmInputFiles") {
+            val res = jsonObj.get("args").toString()
+            Log.v(TAG, "res is $res")
+            webView.loadUrl("javascript:qmInputFiles('$res')")
             result.success("SUCCESS")
         }
     }
@@ -310,7 +311,13 @@ class FlutterWebView @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1) internal con
                     for (i in 0 until fileChooserParams.acceptTypes.size) {
                         jsonArray.put(fileChooserParams.acceptTypes[i])
                     }
+                    val modeMap = mapOf(
+                            FileChooserParams.MODE_OPEN to "MODE_OPEN",
+                            FileChooserParams.MODE_OPEN_MULTIPLE to "MODE_OPEN_MULTIPLE",
+                            FileChooserParams.MODE_SAVE to "MODE_SAVE"
+                            )
                     jsonObject.put("acceptTypes", jsonArray)
+                    jsonObject.put("mode", modeMap[fileChooserParams.mode])
                     methodChannel.invokeMethod("onCustomCommand", jsonObject.toString())
                 }
                 if (!handled) {
